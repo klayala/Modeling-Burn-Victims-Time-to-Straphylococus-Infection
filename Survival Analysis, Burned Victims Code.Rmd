@@ -1,0 +1,325 @@
+---
+title: "Survival Analysis Project, Burned Victims Programmed"
+author: "Kevin Ayala"
+date: "11/13/2018"
+output: pdf_document
+---
+
+```{r}
+library(survival)
+library(tidyverse)
+library(KMsurv)
+
+#Exploratory Data Analysis 
+data("burn")
+burn.dataset <- data("burn")
+
+sum(burn$Z10) #number of patients with burn in throat
+mean(burn$Z4) #avg body burn percentage is 24.69481
+summary(burn) #5 point summary for all variables #z4 would be good
+sum(burn$Z2)
+
+bodilyburncount <- subset(burn, select=Z5:Z10) %>% colSums()
+bodilyburncount  #setting up for barplot
+
+barplot(bodilyburncount, col = "cadetblue1", ylab = "Number of Patients", 
+        xlab="Area of Burn Location",
+        main="Bar Plot of Patient Burn Location",
+        names.arg=c("Head", "Buttock","Trunk", "Upper Leg", "Lower Leg", "Respiratory"))
+
+sum(burn$Z1) #total patients with body cleansing 
+
+
+#number of females in dataset 
+females.in.study <- sum(burn$Z2)
+
+#Number of white people in group 
+sum(burn$Z3)
+
+# Z11 ( Type of Burn), Understanding nature of burn type through KM
+Typeofburn.km <- survfit(Surv(burn$T1, burn$D1) ~ Z11, data = burn)
+plot(Typeofburn.km, xlab = "Time in Days till Excision \n Figure 1.2", ylab = "Probability of Needing Excision", main = "Survival Rates Between Burn Type (Excision)", col = c("purple", "blue", "gold", "red"))
+legend("right", legend=c("Chemical", "Scald", "Electricity", "Flame"), col = c("purple", "blue", "gold", "red"), pch=rep(19,2))
+
+log.rank.test.typeofburn <- survdiff(Surv(T1, D1)~Z11, data = burn)
+log.rank.test.typeofburn
+
+plot(Typeofburn.km, mark="+",lwd=2,col = c("purple", "blue", "yellow", "red"), fun="cloglog", xlab="Days", ylab="Log-Log S", main = "log log plot on type of burn")
+legend(3,1,c("chemical", "scald", "electricity", "flame"),fill=c("purple", "blue", "yellow", "red")) #considering no other covariates. 
+
+
+#routine bathing vs chemical bathing effect 
+treatmentcoxph <- coxph(Surv(T2, D2)~Z1, data=burn)
+treatmentcoxph
+summary(treatmentcoxph)
+
+#now checking under excision 
+treatmentcoxph2 <- coxph(Surv(T1, D1)~Z1, data=burn)
+treatmentcoxph2
+summary(treatmentcoxph2)
+
+#p-value of .008, reject the null hypothesis that no difference exists, thus we know that there is significant difference betweeen bathing in the treatent and routine bathing. Bathing in treatment results in a decrease of the infection risk.
+
+#treatment group graph
+treatmentgroups<- survfit(Surv(T2, D2)~Z1, data = burn)
+summary(treatmentgroups)
+
+
+plot(treatmentgroups, xlab="Time in Days till Excision \n Figure 3.1",
+ylab="Probability of Needing Excision",
+main="Treatment Survival Function Comparison",
+col=c("skyblue","purple"))
+legend("topright",legend=c("Control Group, Routine Bath","Treatment Group, Chemical Bath"), col=c("skyblue","purple"), pch=rep(19,2))
+# end of treatment graph
+
+
+# for excision
+#time 1 
+excision.km <-survfit(Surv(burn$T1, burn$D1)~1) 
+plot(excision.km, xlab= "Time for Excison", ylab="Probability of Needing Excision", conf.int=TRUE,
+     mark.time=TRUE, col = "maroon")
+
+#excision km gender
+excision.gender <- survfit(Surv(burn$T1, burn$D1)~Z2, data=burn)
+summary(excision.gender)
+
+plot(excision.gender, xlab="Time in Days till Excision \n Figure 2.1",
+ylab="Probability of Needing Excision",
+main="Excision Gender Survival Function Comparison",
+col=c("green","purple"), conf.int=TRUE)
+legend("top",legend=c("Male","Female"), col=c("green","purple"), pch=rep(19,2))
+
+
+excision.coxph <- coxph(Surv(T1,D1)~Z2,data=burn) #log rank test for male/female difference
+excision.coxph
+
+
+excision.coxph2 <- coxph(Surv(T1,D1)~.,data=burn)
+excision.coxph2
+Models <- step(excision.coxph2, direction = "backward")
+Models
+
+
+bestfit <- coxph(Surv(T1, D1) ~ Z1 + Z2 + Z4 + Z8 + Z9 + T3, data = burn)
+summary(bestfit)
+
+cox.zph(bestfit)
+
+
+
+befit <- coxph(Surv(T1, D1) ~ (Z1 + Z2 + Z4 + Z8 + Z9 + T3)^2, data = burn)
+step(befit, direction = "backward")
+
+
+befit1 <- coxph(Surv(T3, D3) ~ (Z1 + Z2 + Z3 + Z6 + D1 + D2)^2, data = burn)
+step(befit1, direction = "backward")
+
+befit2<-coxph(Surv(T3, D3) ~ Z1 + Z2 + Z3 + Z6 + D1 + D2 + 
+    Z1:D1 + Z2:Z3 + Z2:D1 + Z2:D2 + Z3:D2, data = burn)
+befit2$coefficients
+summary(befit2)
+
+
+
+cox.zph(befit2, global = FALSE)
+cox.zph(befit1, global = FALSE)
+  
+
+anova(excision.coxph2)
+step(excision.coxph2, direction = "backward")
+
+
+#time 2
+Prophylacti.km <- survfit(Surv(burn$T2, burn$D2)~1) 
+plot(Prophylacti.km, xlab="Time to Prophlactic Treatment", ylab="Probablilty of Survival", col="green")
+
+Prophylacti.km.gender <- survfit(Surv(T2,D2)~Z2, data=burn)
+plot(Prophylacti.km.gender, xlab="Time Till Prophylacti Treatement", ylab ="Probablility of Prophylacti Treatment",
+     main="Prophylacti Gender Comparison", col=c("red","pink"))
+legend("bottomleft", legend=c("Male", "Female"), col=c("red","pink"),pch=rep(19,2)) 
+
+Prophylacti.coxph<- coxph(Surv(T2,D2)~Z11, data=burn)
+Prophylacti.coxph
+Prophylacti.coxph2<- coxph(Surv(T2,D2)~., data=burn)
+anova(Prophylacti.coxph2)
+step(Prophylacti.coxph2, direction = "backward")
+
+
+Prophylacti.coxph
+
+
+#time 3
+straphylocous.km <- survfit(Surv(burn$T3, burn$D3)~1)
+plot(straphylocous.km, xlab="Time to Straphylocous", ylab ="Probability of Getting Sttraphylocous Infection", col="blue")
+
+
+straphylocous.km.gender <- survfit(Surv(T3, D3)~Z2, data=burn)
+
+plot(straphylocous.km.gender, xlab="Time in Days till Staphylocous",
+ylab="Probability of Straphylocous",
+main="Straphylocous Gender Survival Function Comparison",
+col=c("green","purple"))
+legend("top",legend=c("Male","Female"), col=c("green","purple"), pch=rep(19,2))
+
+
+#gender analysis
+?burn
+
+excision.km.ethnicity<- survfit(Surv(T1, D1)~Z3, data=burn)
+summary(excision.km.ethnicity)
+plot(excision.km.ethnicity, xlab="Time in Days till Excision", ylab="Probability of Excicision",
+     main="Ethnicity on Excision", col=c("blue", "red"))
+legend("top",legend=c("White", "Non-White"),col = c("blue","red"),pch = rep(19,2))
+
+log.rank.test.ethnicity <- survdiff(Surv(T1, D1)~Z3, data=burn)
+log.rank.test.ethnicity
+#extremely high p-value=1, probs something wrong. 
+#otherwise fail to reject null, conclude survival rate the same for ethnicities. 
+
+
+
+#question regarding survival rates for different burn
+#null is no difference. 
+log.rank.test.burntype <- survdiff(Surv(T1, D1)~Z11, data=burn)
+log.rank.test.burntype
+   
+#p-value at .04, means no difference in type of burn 
+
+
+Z1cox <- coxph(Surv(T3,D3)~ Z1, data = burn)
+Z2cox <- coxph(Surv(T3,D3)~ Z2 , data = burn)
+Z3cox <- coxph(Surv(T3,D3)~ Z3 , data = burn)
+Z6cox <- coxph(Surv(T3,D3)~ Z6 , data = burn)
+D1cox <- coxph(Surv(T3,D3)~ D1 , data = burn)
+D2cox <- coxph(Surv(T3,D3)~ D2 , data = burn)
+
+
+#log log Z1
+plot(survfit(Z1cox,newdata=data.frame(Z1=factor(c("0", "1")))),
+     fun = "cloglog", main ="Log Log Graph of Bathing Treatment" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Routine Bath", "Body Cleansing"), fill = c(1:2))
+
+#log log Z2
+plot(survfit(Z2cox,newdata=data.frame(Z2=factor(c("0", "1")))),
+     fun = "cloglog", main ="Log Log Graph of Gender" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Male", "Female"), fill = c(1:2))
+
+#log log Z3
+plot(survfit(Z3cox,newdata=data.frame(Z3=factor(c("0", "1")))),
+     fun = "cloglog", main ="Log Log Graph of Race" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Non-White", "White"), fill = c(1:2))
+
+#log log z6
+plot(survfit(Z6cox,newdata=data.frame(Z6=factor(c("1", "0")))),
+     fun = "cloglog", main ="Graph of Burn Site Indicator: Buttock" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Yes", "No"), fill = c(1:2))
+
+#log log D1
+plot(survfit(D1cox,newdata=data.frame(D1=factor(c("1", "0")))),
+     fun = "cloglog", main ="Log Log Graph of Excision Indicator" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Yes", "No"), fill = c(1:2))
+
+#log log D2
+plot(survfit(D2cox,newdata=data.frame(D2=factor(c("1", "0")))),
+     fun = "cloglog", main ="Log Log Graph of Prophylactic Antibiotic" , 
+     xlab="Time until death(in days)", ylab = "Log(-Log(S))", lwd = 2, col = c(1:2))
+legend("bottomright", legend = c("Yes", "No"), fill = c(1:2))
+
+```
+
+```{r}
+#extension code 
+
+###  Due to our burn data set have mutiple events that can occur before an infection happen. We decided to use a recurrent model to test if
+# events happening prior to our D3 have any effect on the survival rate of getting an infection.
+
+
+burn2 = survSplit(Surv(T3, D3)~.,data=burn, cut =c(20,40), episode = "TimeGroup",
+id ="sub.id",end = "tstop")
+head(burn2)
+#spltting time into episodes, and creating start and stop 
+
+
+plot(survfit(Surv(tstart,tstop,D3)~1,data=burn2),lwd=2,xlab="Time in Days \n Figure 4.1",ylab="S(t)",col="maroon",main="Recurrent Survival Function, Straphylococous")
+
+plot(survfit(Surv(tstart,tstop,D3)~Z1,data=burn2),lwd=2,xlab="Time in Days \n Figure 4.2",ylab="Probability of Staphylococcus Infection",col=c("red","gray"), main="Recurrent Survival Function, Straphylococcous")
+legend("topright", legend = c("Bathing Treatment","Regular Bathing, No TRT"), col = c("red","gray"),pch=rep(19,2))
+
+plot(survfit(Surv(tstart,tstop,D3)~D2,data=burn2),lwd=2,xlab="Time in Days \n Figure 4.3",ylab="Probability of Staphylococcus Infection",col=c("red","blue"), main="Recurrent Survival Function, Straphylococous")
+legend("topright", legend = c("On Antibiotic","No Antibiotic"), col = c("red","blue"),pch=rep(19,2))
+
+plot(survfit(Surv(tstart,tstop,D3)~D1,data=burn2),lwd=2,xlab="Time in Days \n Figure 4.4",ylab="Probability of Staphylococcus Infection",col=c("purple","black"), main="Recurrent Survival Function, Straphylococous")
+legend("topright", legend = c("Underwent Excision","No Excision"), col = c("purple","black"),pch=rep(19,2))
+
+
+rets.ft <- coxph(Surv(tstart, tstop, D3) ~ D1 + D2 + D2:(TimeGroup),
+ data=burn2)
+summary(rets.ft)
+
+
+anova(rets.ft)
+
+
+
+beta2 <- coef(rets.ft)[3]
+se.beta2 <- sqrt(vcov(rets.ft)[3,3])
+exp( beta2 +c(-1.96, 1.96)*se.beta2 ) #getting ci for second coeff. 
+
+
+
+
+
+plot(survfit(Surv(tstart,tstop,D3)~Z1+D1+D2,
+data=burn2,
+subset=(burn2$TimeGroup == "1")),
+lwd=2, col=c("red","gray","blue","black","green","purple"),xlab="Days Until Infection \n Figure 4.5",ylab="Probability of Infection",main="Recurrent Survival Function, Straphylococous \n Episode 1")
+legend("bottomleft", legend = c("Bathing Treatment","Regular Bathing, No TRT","Excision","No Excision", "Took Antibiotic","No Antibiotic"), col = c("red","gray","blue","black","green","purple"),pch=rep(19,2))
+
+plot(survfit(Surv(tstart,tstop,D3)~Z1,
+data=burn2,
+subset=(burn2$TimeGroup == "2")),
+lwd=2, col=c("red","gray"),xlab="Days Until Infection \n Figure 4.6",ylab="Probability of Infection",main="Recurrent Survival Function, Straphylococous \n Episode 2")
+legend("bottomleft", legend = c("Bathing Treatment","Regular Bathing, No TRT"), col = c("red","gray","blue","black","green","purple"),pch=rep(19,2))
+
+plot(survfit(Surv(tstart,tstop,D3)~D2,
+data=burn2,
+subset=(burn2$TimeGroup == "3")),
+lwd=2, col=c("red","gray"),xlab="Days Until Infection \n Figure 4.7",ylab="Probability of Infection", main="Recurrent Survival Function, Straphylococous \n Episode 3")
+legend("bottomleft", legend = c("Took Antibiotic","No Antibiotic"), col = c("red","gray"),pch=rep(19,2))
+
+
+
+
+
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+Below is the final model 
+
+$h_i(t)=h_0(t)\times\exp[{.539x_{1i} -38.37x_{2i} +19.1x_{3i}+1.04x_{4i}+.0304x_{5i}+18.27x_{6i}-1.7732x_{1i}x_{5i}+18.39x_{2i}x_{3i}+18.79x_{2i}x_{5i}+2.02x_{2i}x_{6i}-19.93565x_{3i}x_{6i}}]$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
